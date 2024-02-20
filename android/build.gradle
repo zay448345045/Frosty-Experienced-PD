@@ -1,20 +1,6 @@
 apply plugin: 'com.android.application'
 
 android {
-    signingConfigs {
-        debug {
-            storeFile file('C:\Users\hockn\keys\keystore.jks')
-            storePassword '@FKey226'
-            keyAlias 'uploadkey'
-            keyPassword '@FKey226'
-        }
-        release {
-            storeFile file('C:\Users\hockn\keys\keystore.jks')
-            storePassword '@FKey226'
-            keyAlias 'uploadkey'
-            keyPassword '@FKey226'
-        }
-    }
     compileSdkVersion 33
     compileOptions.sourceCompatibility = compileOptions.targetCompatibility = appJavaCompatibility
 
