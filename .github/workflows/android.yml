@@ -1,0 +1,57 @@
+name: Build & Publish Debug Stuff
+
+on:
+ push:
+  branches:
+   - master
+   
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up JDK environment to 11
+      uses: actions/setup-java@v1.4.3
+      with:
+        java-version: 11
+
+      # 1
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Create dynamic version number
+      id: vars
+      shell: bash
+      run: |
+        echo "version="1.2.3-$(git rev-parse --short "$GITHUB_SHA")"" >> $GITHUB_ENV
+        echo "1.2.3-$(git rev-parse --short "$GITHUB_SHA")" > version
+    # 2
+    - name: Generate Release APK
+      run: ./gradlew android:assembleRelease
+    - name: Generate Release JAR
+      run: ./gradlew desktop:release
+
+    - name: Rename APK
+      run: mv android/build/outputs/apk/release/android-release-unsigned-signed.apk android/build/outputs/apk/release/android-release.apk
+
+    - name: Upload as Pre-release
+      uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest_"
+        prerelease: false
+        title: "${{ env.version }}"
+        files: |
+            android/build/outputs/apk/release/android-release.apk
+            desktop/build/libs/*.jar
+
+    - name: Remove unsigned apk
+      run: rm android/build/outputs/apk/release/android-release-unsigned.apk
+
+    - name: Remove unsigned apk part 2
+      run: rm android/build/outputs/apk/release/android-release-unsigned-aligned.apk
+
+    - name: Remove signing key
+      run: rm android/build/outputs/apk/release/signingKey.jks
+
+    - name: Remove output.json
+      run: rm android/build/outputs/apk/release/output.json
