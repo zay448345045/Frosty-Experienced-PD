@@ -3,19 +3,19 @@ apply plugin: 'com.android.application'
 android {
     signingConfigs {
         debug {
-            storeFile file('F:\\extended-experienced-pixel-dungeon.jks')
-            storePassword 'johnnollas12'
-            keyAlias 'eexpd'
-            keyPassword 'johnnollas12'
+            storeFile file('C:\Users\hockn\keys\keystore.jks')
+            storePassword '@FKey226'
+            keyAlias 'uploadkey'
+            keyPassword '@FKey226'
         }
         release {
-            storeFile file('F:\\extended-experienced-pixel-dungeon.jks')
-            storePassword 'johnnollas12'
-            keyAlias 'eexpd'
-            keyPassword 'johnnollas12'
+            storeFile file('C:\Users\hockn\keys\keystore.jks')
+            storePassword '@FKey226'
+            keyAlias 'uploadkey'
+            keyPassword '@FKey226'
         }
     }
-    compileSdkVersion appAndroidCompileSDK
+    compileSdkVersion 33
     compileOptions.sourceCompatibility = compileOptions.targetCompatibility = appJavaCompatibility
 
     sourceSets.main.assets.srcDirs = [new File(project(':core').projectDir, "/src/main/assets")]
@@ -28,8 +28,8 @@ android {
         versionName appVersionName
 
         //noinspection MinSdkTooLow
-        minSdkVersion appAndroidMinSDK
-        targetSdkVersion appAndroidTargetSDK
+        minSdkVersion 33
+        targetSdkVersion 33
 
         resConfigs "en_US"
     }
