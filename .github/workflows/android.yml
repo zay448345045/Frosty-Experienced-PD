@@ -20,11 +20,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       # 2
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      # 3
       - name: Generate Release APK
         run: ./gradlew android:assembleRelease
       - name: Generate Release JAR
         run: ./gradlew desktop:release
-      # 3
+      # 4
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         # ID used to access action output
@@ -60,6 +63,3 @@ jobs:
 
       - name: Rename APK
         run: mv android/build/outputs/apk/release/android-release-unsigned-signed.apk android/build/outputs/apk/release/android-release.apk
-
-      - name: Upload to itch.io
-        uses: josephbmanley/butler-publish-itchio-action@master
