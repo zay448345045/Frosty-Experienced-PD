@@ -38,6 +38,8 @@ jobs:
           alias: ${{ secrets.ALIAS }}
           keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: "33.0.2"
 
       - name: Upload as Pre-release
         uses: "marvinpinto/action-automatic-releases@latest"
@@ -49,6 +51,7 @@ jobs:
           files: |
               android/build/outputs/apk/release/android-release-unsigned-signed.apk
               desktop/build/libs/*.jar
+
       - name: Remove unsigned apk
         run: rm android/build/outputs/apk/release/android-release-unsigned.apk
 
