@@ -47,7 +47,7 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
           prerelease: true
-          title: "dev build, ech"
+          title: "Developer Build"
           files: |
               android/build/outputs/apk/release/android-release-unsigned-signed.apk
               desktop/build/libs/*.jar
@@ -60,9 +60,6 @@ jobs:
 
       - name: Remove signing key
         run: rm android/build/outputs/apk/release/signingKey.jks
-
-      - name: Remove output.json
-        run: rm android/build/outputs/apk/release/output.json
 
       - name: Rename APK
         run: mv android/build/outputs/apk/release/android-release-unsigned-signed.apk android/build/outputs/apk/release/android-release.apk
