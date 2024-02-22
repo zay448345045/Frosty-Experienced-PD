@@ -130,7 +130,7 @@ public class SubtractionItem extends Questionnaire {
             @Override
             public void onSelect( boolean positive, String text ) {
                 if (text.equals(ANSWER)) {
-                    Buff.affect(hero, CodeCooldown5.class).set(10);
+                    Buff.affect(hero, CodeCooldown5.class).set(3);
                     GLog.h("You answered the question correctly, +20HP!");
                     if (streak_b < 11) {
                         CODE = Random.Int(10);
@@ -245,9 +245,7 @@ public class SubtractionItem extends Questionnaire {
                 + "\n\n_Streaks resets at zero when wrong answer is entered._"
                 + "\n\n_Streak Pass List:_"
                 + "\n- (0) Health +20"
-                + "\n- (5) Module Shop available [reset if streak >= 5]"
-                + "\n- (10) Experience +10%"
-                + "\n- (15) Damage +10%";
+                + "\n- (40) Module Shop available [reset if streak >= 40]";
     }
 
     private String STREAKS = "STREAKS";
