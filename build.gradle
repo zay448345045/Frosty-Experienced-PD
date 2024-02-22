@@ -14,11 +14,11 @@ buildscript {
 allprojects {
 
     ext {
-        appName = 'Extended Experienced Pixel Dungeon'
-        appPackageName = 'com.jjbali.experiencedpixeldungeon.extended'
+        appName = 'Frosty Experienced Pixel Dungeon'
+        appPackageName = 'com.icepheonix.experiencedpixeldungeon.frosty'
 
         appVersionCode = 476
-        appVersionName = 'EExpPD-5.0.0'
+        appVersionName = 'FExpPD-1.0.0'
 
         appJavaCompatibility = JavaVersion.VERSION_1_8
 

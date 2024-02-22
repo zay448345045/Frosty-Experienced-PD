@@ -839,6 +839,7 @@ public class ItemSpriteSheet {
 	public static final int INFINITE_STAFF = CREATIVE_ITEMS+4;
 	public static final int INFINITE_SLINGSHOT= CREATIVE_ITEMS+5;
 	public static final int SOUL_OF_MIMIC = CREATIVE_ITEMS+8;
+	public static final int CHAOS_SHORTSWORD = CREATIVE_ITEMS+9;
 
 	private static final int MODULE  =                                   xy(1, 34);  //16 slots
 	public static final int MODULE_ITEM = MODULE+0;
