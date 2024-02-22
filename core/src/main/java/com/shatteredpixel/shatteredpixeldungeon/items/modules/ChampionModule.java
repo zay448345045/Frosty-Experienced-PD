@@ -31,7 +31,7 @@ public class ChampionModule extends Module {
     public void execute( Hero hero, String action ) {
         super.execute(hero, action);
         if (action.equals(AC_USE)) {
-            switch (Random.Int(11)) {
+            switch (Random.Int(10)) {
                 case 0:
                     Buff.affect(hero, ChampionEnemy.AntiMagic.class);
                 case 1:
@@ -40,10 +40,6 @@ public class ChampionModule extends Module {
                     Buff.affect(hero, ChampionEnemy.Blessed.class);
                 case 3:
                     Buff.affect(hero, ChampionEnemy.Confused.class);
-                case 4:
-                    Buff.affect(hero, ChampionEnemy.Cruel.class);
-                case 5:
-                    Buff.affect(hero, ChampionEnemy.Frozen.class);
                 case 6:
                     Buff.affect(hero, ChampionEnemy.Giant.class);
                 case 7:
@@ -52,8 +48,6 @@ public class ChampionModule extends Module {
                     Buff.affect(hero, ChampionEnemy.Immunization.class);
                 case 9:
                     Buff.affect(hero, ChampionEnemy.Poisonous.class);
-                case 10:
-                    Buff.affect(hero, ChampionEnemy.Projecting.class);
             }
             detach(hero.belongings.backpack);
         }
