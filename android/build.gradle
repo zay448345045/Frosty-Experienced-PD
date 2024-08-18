@@ -16,7 +16,8 @@ android {
         //noinspection MinSdkTooLow
         minSdkVersion appAndroidMinSDK//33
         targetSdkVersion appAndroidTargetSDK//33
-
+//
+        resourceConfigurations += ['en_US', 'zh_CN']
         resConfigs "en_US", "el", "nl", "uk", "vi", "zh"
     }
 
