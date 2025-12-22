@@ -3,8 +3,10 @@ name: Upload thing when pushing something
 
 on:
   push:
-    branches:
-      - "master"
+      paths:
+     - 'action.on' # 只有 特定 文件的更改才构建
+ #   branches:
+#      - "master"
 
 jobs:
   build:
