@@ -1,0 +1,46 @@
+name: Wazone XML D Sync
+
+on:
+  workflow_dispatch:
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python_version: '3.10'
+
+      - name: Install Deps
+        run: pip install requests lxml
+
+      - name: Run Downloader
+        run: python download.py
+          
+      - name: Archive and Purge
+        if: always()
+        run: |
+          echo "正在封存已下载资产..."
+          # 使用 mx0 极速分卷，确保 1.9GB 一个
+          7z a -v1900m -mx0 wazone_vault.7z ./harvest_zone/* || echo "没有新文件下载"
+          # 关键：先打包，后删除，为上传腾出 IO 空间
+          rm -rf ./harvest_zone
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: "wazone-vault"
+          files: wazone_vault.7z.*
+          body: |
+            ## 同步状态
+            - **状态**: 磁盘熔断自保触发或任务完成
+            - **说明**: 请检查分卷。若需继续下载，请在 Release 完成后再次运行此 Workflow。
+            **。**
