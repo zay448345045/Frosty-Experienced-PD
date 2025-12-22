@@ -62,13 +62,13 @@ class XMLBatchDownloader:
             print(f"  [-] 失败 {key}: {e}")
             return False
 
-    def start(self, xml_dir):
+    def start(self, xml_dir,skip_offset=0):
         xml_files = sorted(Path(xml_dir).glob("*.xml"))
         all_assets = []
         for x in xml_files:
             all_assets.extend(self.parse_xml_file(x))
-        
-        print(f"🚀 总计清单项: {len(all_assets)}。开始并发同步...")
+        task_assets = all_assets[skip_offset:]
+        print(f"🚀 总计清单项: {len(all_assets)}。已跳过 {skip_offset}，本次待处理 {len(task_assets)} 开始并发同步...")
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_key = {executor.submit(self.download_file, k, s): k for k, s in all_assets}
