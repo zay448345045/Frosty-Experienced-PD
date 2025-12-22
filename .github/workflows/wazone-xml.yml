@@ -1,7 +1,12 @@
-name: Wazone XML D Sync
+name: Wazone XML Sequential Harvester
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_to:
+        description: '下轮起始索引 (请查阅上轮日志末尾提供的数字)'
+        required: true
+        default: '0'
 
 jobs:
   harvest:
@@ -18,29 +23,44 @@ jobs:
         with:
           python_version: '3.10'
 
-      - name: Install Deps
-        run: pip install requests lxml
+      - name: Install Dependencies
+        run: |
+          pip install requests lxml
 
-      - name: Run Downloader
-        run: python download.py
+      - name: Execute Precision Harvest
+        id: run_script
+        run: |
+          # 运行下载器，传入手动指定的跳过值
+          python download.py --skip ${{ github.event.inputs.skip_to }} --xml_dir ./lists
           
-      - name: Archive and Purge
+      - name: Archive to Segmented Vault
         if: always()
         run: |
-          echo "正在封存已下载资产..."
-          # 使用 mx0 极速分卷，确保 1.9GB 一个
-          7z a -v1900m -mx0 wazone_vault.7z ./harvest_zone/* || echo "没有新文件下载"
-          # 关键：先打包，后删除，为上传腾出 IO 空间
+          echo "### 正在启动封存程序..."
+          # 检查目录是否为空（防止没有任何下载时 7z 报错）
+          if [ -d "./harvest_zone" ] && [ "$(ls -A ./harvest_zone)" ]; then
+            # 压缩包名包含起始索引，如 wazone_idx_5200.7z.001
+            # 使用 -mx0 存储模式，速度最快且 CPU 占用最低
+            7z a -v1900m -mx0 "wazone_idx_${{ github.event.inputs.skip_to }}.7z" ./harvest_zone/*
+            echo "✅ 本轮分片已创建。"
+          else
+            echo "⚠️ 本轮无新资产下载，跳过打包。"
+          fi
+          # 立即释放磁盘空间
           rm -rf ./harvest_zone
 
-      - name: Upload to Release
+      - name: Upload to Central Release
         uses: softprops/action-gh-release@v2
         if: always()
         with:
           tag_name: "wazone-vault"
-          files: wazone_vault.7z.*
+          name: "Wazone 资源库 "
+          # 仅上传本次生成的特定编号分卷
+          files: "wazone_idx_${{ github.event.inputs.skip_to }}.7z.*"
+          append_body: true
           body: |
-            ## 同步状态
-            - **状态**: 磁盘熔断自保触发或任务完成
-            - **说明**: 请检查分卷。若需继续下载，请在 Release 完成后再次运行此 Workflow。
-            **。**
+            ---
+            ### 📥 增量同步报告
+            - **本批次起始索引**: `${{ github.event.inputs.skip_to }}`
+            - **同步时间**: ${{ github.event.repository.updated_at }}
+            - **状态**: 已安全归档。请参考对应的 Action 日志获取下一轮 `skip_to` 参数。
