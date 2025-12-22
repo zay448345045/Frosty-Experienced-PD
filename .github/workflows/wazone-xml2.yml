@@ -1,0 +1,91 @@
+name: Wazone Auto-Relay Harvester V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_to:
+        description: '起始索引 (本轮从第几个资源开始下载)'
+        required: true
+        default: '0'
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write  # 必须开启，用于触发下一轮接力任务
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Tactical Space Expansion
+        # 稳健清理方案：腾出约 30GB 空间，确保单轮收割量最大化
+        run: |
+          echo "=== 初始空间 ==="
+          df -h
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          echo "=== 清理后空间 ==="
+          df -h
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python_version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests lxml
+
+      - name: Execute Precision Harvest
+        id: run_script
+        run: |
+          # 运行下载器。它会自动在磁盘剩余 5GB 时停止，并写入下轮索引到 next_skip.txt
+          python download.py --skip ${{ github.event.inputs.skip_to }} --xml_dir ./lists
+          
+      - name: Archive and Compress
+        if: always()
+        run: |
+          echo "### 正在进行阶段性封存..."
+          if [ -d "./harvest_zone" ] && [ "$(ls -A ./harvest_zone)" ]; then
+            # 使用存储模式 (-mx0) 最小化 CPU 负载，加快打包速度
+            7z a -v1900m -mx0 "wazone_idx_${{ github.event.inputs.skip_to }}.7z" ./harvest_zone/*
+            # 必须删除原始文件，否则 Release 上传步骤可能会因磁盘空间不足而崩溃
+            rm -rf ./harvest_zone
+          else
+            echo "⚠️ 本轮未捕获到新资产。"
+          fi
+
+      - name: Upload to New Vault (V2)
+        uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: "wazone-vault-v2"
+          name: "Wazone 资源总库 V2 (自动化递归归档)"
+          files: "wazone_idx_${{ github.event.inputs.skip_to }}.7z.*"
+          append_body: true
+          body: |
+            ---
+            ### 📥 自动收割报告 (起始点: ${{ github.event.inputs.skip_to }})
+            - **状态**：归档成功
+            - **接力逻辑**：已自动触发下一轮任务。
+
+      - name: Self-Triggering Relay (自动化接力)
+        # 只有在下载流程成功完成后才启动下一轮，防止因报错导致的死循环
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f next_skip.txt ]; then
+            NEXT_INDEX=$(cat next_skip.txt)
+            # 设定资源总量阈值（约 128,307），防止过度运行
+            if [ "$NEXT_INDEX" -lt 128307 ]; then
+              echo "🚀 接力信号：$NEXT_INDEX。正在启动下一轮任务..."
+              # 精确指向 wazone-xml2.yml 文件
+              gh workflow run wazone-xml2.yml -f skip_to=$NEXT_INDEX
+            else
+              echo "🎉 博士，全境资产收割任务已圆满完成！"
+            fi
+          else
+            echo "❌ 错误：未发现 next_skip.txt，自动化链条断裂。"
+            exit 1
+          fi
