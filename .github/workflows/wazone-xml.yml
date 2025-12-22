@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       skip_to:
-        description: '下轮起始索引 (请查阅上轮日志末尾提供的数字)'
+        description: '下轮起始索引 (请查阅上轮日志末尾提示的数字)'
         required: true
         default: '0'
 
@@ -18,6 +18,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v5
 
+      - name: Expand Tactical Space (基础空间回收)
+        # 这一步会删除体积巨大且对我们无用的 Android SDK 和 .NET 预装
+        # 能够为下载和打包腾出约 20-30GB 的额外“净土”
+        run: |
+          echo "=== 清理前磁盘状况 ==="
+          df -h
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          echo "=== 清理后磁盘状况 ==="
+          df -h
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -30,37 +40,36 @@ jobs:
       - name: Execute Precision Harvest
         id: run_script
         run: |
-          # 运行下载器，传入手动指定的跳过值
+          # 运行下载器，传入 skip 参数，xml 存放在根目录下的 lists 文件夹中
           python download.py --skip ${{ github.event.inputs.skip_to }} --xml_dir ./lists
           
       - name: Archive to Segmented Vault
         if: always()
         run: |
-          echo "### 正在启动封存程序..."
-          # 检查目录是否为空（防止没有任何下载时 7z 报错）
+          echo "### 正在封存本轮收割成果..."
+          # 只有当 harvest_zone 目录下确实有文件时才执行打包
           if [ -d "./harvest_zone" ] && [ "$(ls -A ./harvest_zone)" ]; then
-            # 压缩包名包含起始索引，如 wazone_idx_5200.7z.001
-            # 使用 -mx0 存储模式，速度最快且 CPU 占用最低
+            # -v1900m：分卷成 1.9GB 一个，防止单文件过大导致上传超时
+            # -mx0：存储模式，不压缩，速度最快，且打包时最省磁盘
             7z a -v1900m -mx0 "wazone_idx_${{ github.event.inputs.skip_to }}.7z" ./harvest_zone/*
-            echo "✅ 本轮分片已创建。"
+            echo "✅ 本轮分片已就绪。"
+            # 立即删除原始文件，确保 Release 步骤有足够的空间上传
+            rm -rf ./harvest_zone
           else
-            echo "⚠️ 本轮无新资产下载，跳过打包。"
+            echo "⚠️ 本轮未下到新资产，跳过归档。"
           fi
-          # 立即释放磁盘空间
-          rm -rf ./harvest_zone
 
       - name: Upload to Central Release
         uses: softprops/action-gh-release@v2
         if: always()
         with:
           tag_name: "wazone-vault"
-          name: "Wazone 资源库 "
-          # 仅上传本次生成的特定编号分卷
+          name: "Wazone 资源总库 (260GB 连续归档)"
+          # 使用通配符匹配本次下载产生的所有分卷
           files: "wazone_idx_${{ github.event.inputs.skip_to }}.7z.*"
           append_body: true
           body: |
             ---
-            ### 📥 增量同步报告
-            - **本批次起始索引**: `${{ github.event.inputs.skip_to }}`
-            - **同步时间**: ${{ github.event.repository.updated_at }}
-            - **状态**: 已安全归档。请参考对应的 Action 日志获取下一轮 `skip_to` 参数。
+            ### 📥 增量报告 (索引: ${{ github.event.inputs.skip_to }})
+            - 本次收割成果已安全入库。
+            - **接力暗号**：请查阅 Action 日志末尾的 `skip_to` 数字，作为下轮启动参数。
