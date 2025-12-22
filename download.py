@@ -83,7 +83,7 @@ class XMLBatchDownloader:
 if __name__ == "__main__":
     downloader = XMLBatchDownloader(output_dir="harvest_zone")
     downloader.start(xml_dir="./lists")
-'''
+
 import os
 import sys
 import time
@@ -233,6 +233,161 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Wazone XML Downloader")
     parser.add_argument('--skip', type=int, default=0, help='要跳过的文件数量')
     parser.add_argument('--xml_dir', type=str, default='./lists', help='XML清单所在目录')
+    args = parser.parse_args()
+
+    downloader = XMLBatchDownloader(output_dir="harvest_zone")
+    downloader.run(xml_dir=args.xml_dir, skip_count=args.skip)
+'''
+import os
+import sys
+import time
+import shutil
+import subprocess
+import threading
+import argparse
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+from lxml import etree
+
+class XMLBatchDownloader:
+    def __init__(self, base_url="https://wazone-file.wahlap.net/", max_workers=10, output_dir="harvest_zone"):
+        self.base_url = base_url.rstrip('/')
+        self.max_workers = max_workers
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.stats = {'downloaded': 0, 'failed': 0, 'skipped': 0, 'retried': 0}
+        self.stop_signal = False
+        self.lock = threading.Lock()
+        
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'UnityPlayer/2021.3.11f1c1 (UnityWebRequest/1.0)',
+            'Referer': 'https://wazone.wahlap.net/'
+        })
+
+    def check_disk_space(self):
+        """磁盘安全策略：下到 45% 必须熔断，为打包留出镜像空间"""
+        total, used, free = shutil.disk_usage("/")
+        usage_percent = (used / total) * 100
+        if usage_percent > 45:
+            print(f"\n[⚠️ 熔断] 磁盘占用 {usage_percent:.1f}%。触发保护，本轮收割结束。")
+            self.stop_signal = True
+            return True
+        return False
+
+    def parse_xml_file(self, xml_path: Path):
+        """解析 XML 清单"""
+        try:
+            with open(xml_path, 'r', encoding='utf-8') as f:
+                xml_content = f.read()
+            root = etree.fromstring(xml_content.encode('utf-8'))
+            namespaces = {'ns': 'http://obs.myhwclouds.com/doc/2015-06-30/'}
+            contents = root.xpath('.//ns:Contents', namespaces=namespaces) or root.xpath('.//Contents')
+            
+            file_list = []
+            for item in contents:
+                k_node = item.find('Key') if item.find('Key') is not None else item.find('ns:Key', namespaces=namespaces)
+                s_node = item.find('Size') if item.find('Size') is not None else item.find('ns:Size', namespaces=namespaces)
+                if k_node is not None and s_node is not None:
+                    key, size = k_node.text.strip(), int(s_node.text)
+                    if size > 0 and not key.endswith('/'):
+                        file_list.append((key, size))
+            return file_list
+        except Exception as e:
+            print(f"  ❌ 解析 {xml_path.name} 失败: {e}")
+            return []
+
+    def download_file(self, key, size, max_retries=3):
+        """核心：带完整性校验的下载逻辑"""
+        if self.stop_signal: return False
+        
+        file_url = f"{self.base_url}/{key}"
+        local_path = self.output_dir / key
+        
+        # 1. 预检查：如果文件已存在且大小匹配，直接跳过
+        if local_path.exists():
+            if local_path.stat().st_size == size:
+                with self.lock: self.stats['skipped'] += 1
+                return True
+            else:
+                # 大小不匹配，说明是上次留下的残片，删掉重来
+                local_path.unlink()
+
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 2. 带重试的下载循环
+        for attempt in range(max_retries):
+            if self.stop_signal: return False
+            try:
+                with self.session.get(file_url, stream=True, timeout=(10, 30)) as r:
+                    r.raise_for_status()
+                    
+                    # 获取服务器返回的实际大小（优先信任 Header，备选信任 XML）
+                    expected_size = int(r.headers.get('Content-Length', size))
+                    
+                    with open(local_path, 'wb') as f:
+                        current_downloaded = 0
+                        for chunk in r.iter_content(chunk_size=1024*64):
+                            if self.stop_signal: 
+                                f.close()
+                                if local_path.exists(): local_path.unlink()
+                                return False
+                            if chunk:
+                                f.write(chunk)
+                                current_downloaded += len(chunk)
+                    
+                    # --- 博士，此处为完整性校验之魂 ---
+                    if current_downloaded >= expected_size:
+                        with self.lock: self.stats['downloaded'] += 1
+                        return True
+                    else:
+                        # 发现截断，删除残块并准备重试
+                        if local_path.exists(): local_path.unlink()
+                        with self.lock: self.stats['retried'] += 1
+                        print(f"  [!] 截断异常 (下到 {current_downloaded}/{expected_size})，正在进行第 {attempt+1} 次重试...")
+                        time.sleep(1) # 稍微缓冲一下网络
+            except Exception as e:
+                if local_path.exists(): local_path.unlink()
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    continue
+                if not self.stop_signal:
+                    print(f"  [-] 彻底失败 {key}: {e}")
+                    with self.lock: self.stats['failed'] += 1
+            
+        return False
+
+    def run(self, xml_dir, skip_count):
+        xml_files = sorted(Path(xml_dir).glob("*.xml"))
+        if not xml_files: return print(f"❌ 找不到 XML 清单于 {xml_dir}")
+
+        all_assets = []
+        for x in xml_files: all_assets.extend(self.parse_xml_file(x))
+        
+        task_assets = all_assets[skip_count:]
+        print(f"\n🚀 启动：总项 {len(all_assets)} | 起点 {skip_count} | 待收割 {len(task_assets)}\n")
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_key = {executor.submit(self.download_file, k, s): k for k, s in task_assets}
+            
+            processed = 0
+            for future in as_completed(future_to_key):
+                processed += 1
+                if processed % 50 == 0:
+                    if self.check_disk_space(): break
+            
+            final_index = skip_count + processed
+            print(f"\n{'='*50}")
+            print(f"🏁 统计：成功 {self.stats['downloaded']} | 跳过 {self.stats['skipped']} | 失败 {self.stats['failed']} | 重试次数 {self.stats['retried']}")
+            print(f"📢 下一轮 skip_to 请填入: {final_index}")
+            print(f"{'='*50}\n")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--skip', type=int, default=0)
+    parser.add_argument('--xml_dir', type=str, default='./lists')
     args = parser.parse_args()
 
     downloader = XMLBatchDownloader(output_dir="harvest_zone")
