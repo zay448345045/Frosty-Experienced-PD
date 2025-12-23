@@ -17,18 +17,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write  # 必须开启，用于触发接力任务
+      actions: write
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
 
       - name: Tactical Space Expansion (极限清理)
-        # 彻底清理环境，腾出约 60GB+ 空间，确保单轮收割量最大化
         run: |
           echo "=== 初始空间 ==="
           df -h
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force
           echo "=== 清理后空间 ==="
           df -h
 
@@ -43,19 +43,14 @@ jobs:
       - name: Execute Precision Harvest
         id: run_script
         run: |
-          # 运行 2.0 版 Python。它会在磁盘剩余 45GB 时安全退出并生成报告
-          # 请确保仓库中的脚本名为 download.py
+          # 确保 Python 脚本中的熔断值已改为 30GB 以适配 V4
           python download.py --skip ${{ github.event.inputs.skip_to }} --workers ${{ github.event.inputs.workers }} --xml_dir ./lists
           
       - name: Archive and Compress (分卷归档)
-        if: always() # 即使下载报错也要尝试打包已拿到的部分
+        if: always()
         run: |
-          echo "### 正在进行阶段性封存..."
           if [ -d "./harvest_zone" ] && [ "$(ls -A ./harvest_zone)" ]; then
-            # -mx0 存储模式，确保在 45GB 剩余空间内安全分卷
-            # 使用起始行命名文件，方便 Release 页面区分
-            7z a -v1900m -mx0 "wazone_idx_${{ github.event.inputs.skip_to }}.7z" ./harvest_zone/*
-            # 立即释放空间，为上传腾位置
+            7z a -v1900m -mx0 "wazone_v4_idx_${{ github.event.inputs.skip_to }}.7z" ./harvest_zone/*
             rm -rf ./harvest_zone
           else
             echo "⚠️ 本轮未捕获到新资产。"
@@ -63,13 +58,15 @@ jobs:
 
       - name: Upload to Vault V4 (资产与报告)
         uses: softprops/action-gh-release@v2
-        if: always() # 无论成功失败，都将已有的进度和报告传上去
+        if: always()
         with:
           tag_name: "wazone-vault-v4"
-          name: "Wazone  V4"
+          name: "Wazone 资源总库 V4"
+          # 【精准修正】重命名语法为 path:new_name，每行处理一个文件
           files: |
-            wazone_idx_${{ github.event.inputs.skip_to }}.7z.*
-            failed_report.txt:failed_report_${{ github.event.inputs.skip_to }}.txt:next_skip_${{ github.event.inputs.skip_to }}.txt
+            wazone_v4_idx_${{ github.event.inputs.skip_to }}.7z.*
+            failed_report.txt:failed_report_${{ github.event.inputs.skip_to }}.txt
+            next_skip.txt:next_skip_${{ github.event.inputs.skip_to }}.txt
             next_skip.txt
           append_body: true
           body: |
@@ -77,30 +74,26 @@ jobs:
             ### 📥 自动报告 (起始点: ${{ github.event.inputs.skip_to }})
             - **并发线程**: ${{ github.event.inputs.workers }}
             - **状态**: 阶段性任务完成
-            - **后续接力**: 请参考附件 next_skip.txt 中的索引值
+            - **后续接力**: 详见附件 next_skip_${{ github.event.inputs.skip_to }}.txt
 
       - name: Self-Triggering Relay (自动化接力)
-        # 即使 Python 因为空间熔断停止，只要成功生成了下轮索引就继续接力
         if: success() 
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -f next_skip.txt ]; then
             NEXT_INDEX=$(cat next_skip.txt)
-            
-            # 安全阀：防止死循环（如果进度没走，说明脚本报错，停止接力）
             if [ "$NEXT_INDEX" -le "${{ github.event.inputs.skip_to }}" ]; then
-                echo "🛑 进度停滞，为防止死循环，接力终止。"
+                echo "🛑 进度停滞，接力终止。"
                 exit 1
             fi
 
-            # 设定资源总量阈值（根据您的列表总行数修改，例如 128307）
             if [ "$NEXT_INDEX" -lt 128307 ]; then
               echo "🚀 接力信号：$NEXT_INDEX。正在启动下一轮任务..."
-              # 显式指向您的文件名 wazone-xml2.yml
+              # 确保这里的文件名和您在仓库里的 yml 文件名一致
               gh workflow run wazone-xml2.yml -f skip_to=$NEXT_INDEX -f workers=${{ github.event.inputs.workers }}
             else
-              echo "所有已完成！"
+              echo "🎉 所有已完成！"
             fi
           else
             echo "❌ 未发现接力索引文件，链条断裂。"
