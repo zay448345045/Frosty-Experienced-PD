@@ -46,7 +46,7 @@ class XMLBatchDownloader:
         return False
 
     def parse_xml_file(self, xml_path: Path):
-        """解析 XML 资源清单，提取 Key 和 Size"""
+        解析 XML 资源清单，提取 Key 和 Size
         try:
             with open(xml_path, 'r', encoding='utf-8') as f:
                 root = etree.fromstring(f.read().encode('utf-8'))
