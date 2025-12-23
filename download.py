@@ -17,7 +17,7 @@ class XMLBatchDownloader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.stats = {'downloaded': 0, 'failed': 0, 'skipped': 0, 'retried': 0}
-        self.failed_keys = []  # 记录具体的失败名单
+        self.failed_keys = []  
         self.stop_signal = False
         self.lock = threading.Lock()
 
@@ -29,15 +29,19 @@ class XMLBatchDownloader:
         })
 
     def check_disk_space(self):
-        """核心监控：剩余空间低于 45GB 则强制收尾（确保 7z 有足够镜像空间）"""
+        """
+        核心监控：剩余空间低于 30GB 则强制收尾。
+        留出 30GB 是为了确保 7z 在打包 20GB 左右的资源时，有足够的临时镜像空间。
+        """
         total, used, free = shutil.disk_usage("/")
         free_gb = free / (1024**3)
 
         if self.stats['downloaded'] % 50 == 0:
-            print(f"📊 空间监测：剩余 {free_gb:.2f} GB 可用 | 已下: {self.stats['downloaded']}")
+            print(f"📊 空间监测：剩余 {free_gb:.2f} GB 可用 | 已成功下载: {self.stats['downloaded']}")
 
+        # 这里的 30GB 是 V4 顺畅运行的关键水位线
         if free_gb < 30:
-            print(f"\n[⚠️ 空间熔断] 磁盘仅剩 {free_gb:.2f} GB（触碰 45GB 安全线），强制停止并准备打包。")
+            print(f"\n[⚠️ 空间熔断] 磁盘仅剩 {free_gb:.2f} GB（触碰 30GB 安全水位），正在安全撤退...")
             self.stop_signal = True
             return True
         return False
@@ -64,13 +68,16 @@ class XMLBatchDownloader:
             return []
 
     def download_file(self, key, size, max_retries=3):
-        """执行下载：具备断点跳过与完整性校验"""
+        """
+        执行下载。
+        如果在下载中途触发 stop_signal，会立即删除未完成的文件，不占用空间。
+        """
         if self.stop_signal: return False
 
         file_url = f"{self.base_url}/{key}"
         local_path = self.output_dir / key
 
-        # 1. 存在性校验
+        # 1. 断点续传/跳过逻辑
         if local_path.exists():
             if local_path.stat().st_size == size:
                 with self.lock: self.stats['skipped'] += 1
@@ -82,7 +89,9 @@ class XMLBatchDownloader:
 
         # 2. 重试下载逻辑
         for attempt in range(max_retries):
-            if self.stop_signal: return False
+            if self.stop_signal: 
+                return False # 被熔断拦截，不计入失败名单
+
             try:
                 with self.session.get(file_url, stream=True, timeout=(10, 30)) as r:
                     r.raise_for_status()
@@ -90,8 +99,8 @@ class XMLBatchDownloader:
                         for chunk in r.iter_content(chunk_size=1024*128):
                             if self.stop_signal: 
                                 f.close()
-                                if local_path.exists(): local_path.unlink()
-                                return False
+                                if local_path.exists(): local_path.unlink() # 熔断清理
+                                return False 
                             if chunk: f.write(chunk)
                     
                     if local_path.stat().st_size >= size:
@@ -103,10 +112,11 @@ class XMLBatchDownloader:
                     time.sleep(2)
                     continue
         
-        # 彻底失败后记录
-        with self.lock:
-            self.stats['failed'] += 1
-            self.failed_keys.append(key)
+        # 只有在空间充足但下载依然失败的情况下，才记入“阵亡名单”
+        if not self.stop_signal:
+            with self.lock:
+                self.stats['failed'] += 1
+                self.failed_keys.append(key)
         return False
 
     def run(self, xml_dir, skip_count):
@@ -116,34 +126,40 @@ class XMLBatchDownloader:
             all_assets.extend(self.parse_xml_file(x))
 
         task_assets = all_assets[skip_count:]
-        print(f"\n🚀 任务启动 | 总量: {len(all_assets)} | 起始索引: {skip_count}\n")
+        total_tasks = len(task_assets)
+        print(f"\n🚀 V4 收割行动启动 | 待处理: {total_tasks} | 起始索引: {skip_count}\n")
 
         processed_this_round = 0
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_key = {executor.submit(self.download_file, k, s): k for k, s in task_assets}
 
             for future in as_completed(future_to_key):
+                if self.stop_signal:
+                    # 一旦触发熔断，不再处理后续已提交但未开始的任务
+                    break
+                
                 processed_this_round += 1
                 if processed_this_round % 15 == 0:
                     if self.check_disk_space():
-                        break
+                        # 触发熔断后，线程池会自然收尾当前正在跑的线程
+                        pass
 
-        # --- 核心：保存情报与进度 ---
+        # --- 进度结算 ---
+        # 这里的 final_index 将作为下一次 --skip 的输入
         final_index = skip_count + processed_this_round
         
-        # 1. 保存下一轮起始索引
         with open("next_skip.txt", "w") as f:
             f.write(str(final_index))
         
-        # 2. 保存失败报告
         if self.failed_keys:
             with open("failed_report.txt", "w") as f:
                 f.write("\n".join(self.failed_keys))
 
         print(f"\n" + "="*60)
-        print(f"🏁 阶段性总结")
-        print(f"✅ 成功: {self.stats['downloaded']} | ⏭️ 跳过: {self.stats['skipped']} | ❌ 失败: {self.stats['failed']}")
-        print(f"📢 自动接力点（下次 --skip 参数）: {final_index}")
+        print(f"🏁 阶段性总结 (V4)")
+        print(f"✅ 成功: {self.stats['downloaded']} | ⏭️ 跳过: {self.stats['skipped']} | ❌ 真正失败: {self.stats['failed']}")
+        print(f"⚠️ 因空间不足顺延至下一轮的任务数: {total_tasks - processed_this_round}")
+        print(f"📢 自动接力索引: {final_index}")
         print("="*60 + "\n")
 
 if __name__ == "__main__":
