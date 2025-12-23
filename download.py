@@ -83,7 +83,7 @@ class XMLBatchDownloader:
         for attempt in range(max_retries):
             if self.stop_signal: return False
             try:
-                with self.session.get(file_url, stream=True, timeout=(15, 60)) as r:
+                with self.session.get(file_url, stream=True, timeout=(10, 30)) as r:
                     r.raise_for_status()
                     expected_size = int(r.headers.get('Content-Length', size))
                     
