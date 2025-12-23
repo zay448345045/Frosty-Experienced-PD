@@ -1,4 +1,4 @@
-name: Wazone Auto-Relay Harvester V2
+name: Wazone Auto-Relay Harvester V4
 
 on:
   workflow_dispatch:
@@ -61,15 +61,15 @@ jobs:
             echo "⚠️ 本轮未捕获到新资产。"
           fi
 
-      - name: Upload to Vault V2 (资产与报告)
+      - name: Upload to Vault V4 (资产与报告)
         uses: softprops/action-gh-release@v2
         if: always() # 无论成功失败，都将已有的进度和报告传上去
         with:
-          tag_name: "wazone-vault-v2"
-          name: "Wazone 资源总库 V2"
+          tag_name: "wazone-vault-v4"
+          name: "Wazone  V4"
           files: |
             wazone_idx_${{ github.event.inputs.skip_to }}.7z.*
-            failed_report.txt
+            failed_report.txt:failed_report_${{ github.event.inputs.skip_to }}.txt:next_skip_${{ github.event.inputs.skip_to }}.txt
             next_skip.txt
           append_body: true
           body: |
