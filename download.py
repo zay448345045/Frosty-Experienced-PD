@@ -36,7 +36,7 @@ class XMLBatchDownloader:
         if self.stats['downloaded'] % 50 == 0:
             print(f"📊 空间监测：剩余 {free_gb:.2f} GB 可用 | 已下: {self.stats['downloaded']}")
 
-        if free_gb < 45:
+        if free_gb < 30:
             print(f"\n[⚠️ 空间熔断] 磁盘仅剩 {free_gb:.2f} GB（触碰 45GB 安全线），强制停止并准备打包。")
             self.stop_signal = True
             return True
