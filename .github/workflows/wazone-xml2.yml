@@ -60,7 +60,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: always()
         with:
-          tag_name: "wazone-vault-v4"
+          tag_name: "wazone-vault-v6"
           name: "Wazone 资源总库 V4"
           # 【精准修正】重命名语法为 path:new_name，每行处理一个文件
           files: |
