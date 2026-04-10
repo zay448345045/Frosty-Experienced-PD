@@ -20,3 +20,6 @@ If you'd like to work with the code, you can find the following guides in `/docs
 - [Compiling for iOS.](docs/getting-started-ios.md)
 - [Recommended changes for making your own version.](docs/recommended-changes.md)
 https://github.com/zhom/donutbrowser?hl=zh-CN
+
+
+https://github.com/samisalkosuo/camoufox&hl=zh-CN
